@@ -211,6 +211,9 @@ async function run() {
           return true;
         }
       }
+      if (myHover != null) {
+        canvasValid = false;
+      }
       myHover = null;
       return false;
     }
