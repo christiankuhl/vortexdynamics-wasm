@@ -1,0 +1,56 @@
+#controls input {
+  -webkit-appearance: none;
+  height: 7px;
+  border-radius: 3px;
+  background: #dfdfdf;
+  outline: none;
+  opacity: 0.7;
+  -webkit-transition: .2s;
+  transition: opacity .2s;
+}
+
+/* Mouse-over effects */
+#controls input:hover {
+  opacity: 1; /* Fully shown on mouse-over */
+}
+
+#controls input::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #007ef8;
+  cursor: pointer;
+}
+
+#controls input::-moz-range-thumb {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: #007ef8;
+  cursor: pointer;
+}
+
+.contextmenu {
+  width: 120px;
+  box-shadow: 0 4px 5px 3px rgba(0, 0, 0, 0.2);
+  position: absolute;
+  display: none;
+}
+
+.contextmenu-options {
+  list-style: none;
+  padding: 10px 0;
+}
+
+.contextmenu-option {
+  font-weight: 500;
+  font-size: 14px;
+  padding: 10px 40px 10px 20px;
+  cursor: pointer;
+}
+
+.contextmenu-option:hover {
+  background: rgba(0, 0, 0, 0.2);
+}

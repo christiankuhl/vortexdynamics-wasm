@@ -1,15 +1,18 @@
 <html>
   <head>
     <meta content="text/html;charset=utf-8" http-equiv="Content-Type"/>
-    <!-- <link rel="stylesheet" href="mandelbrot.css"> -->
+    <link rel="stylesheet" href="vortex_dynamics.css">
   </head>
   <body>
     <script type="module" src="vortex_dynamics.js"></script>
     <div id="container">
-      <canvas id="vortex-canvas"></canvas>
+      <div class="contextmenu">
+        <ul class="contextmenu-options">
+          <li class="contextmenu-option" id="delete-vortex">Delete vortex</li>
+        </ul>
+      </div>
+      <canvas id="vortex-canvas" width=600px height=600px></canvas>
       <menu id="controls">
-        <a id="reset">Reset</a>
-        <a id="save" download="mandelbrot.png">Save</a>
       </menu>
     </div>
   </body>
