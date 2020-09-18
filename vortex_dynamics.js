@@ -3,6 +3,7 @@ import init, { NVortexProblem } from './pkg/vortex_dynamics.js';
 async function run() {
     const wasm = await init();
     var solution;
+    var t;
     var canvas;
     var ctx;
     var vortices;
@@ -178,7 +179,7 @@ async function run() {
     function onMouseMove(e){
       if (selectVortex(e)) { 
           canvasValid = false; 
-          this.style.cursor = 'grab';
+          this.style.cursor = 'pointer';
       } else {
           this.style.cursor = 'auto';
       }
@@ -325,8 +326,14 @@ async function run() {
       canvas.addEventListener("contextmenu", onRightClick);
       document.getElementById("delete-vortex").onclick = removeVortex;
       playbutton.onclick = toggleAnimation;
-      addVortex(-.1, 0, 1);
-      addVortex(.1, 0, -1);
+      
+      // Add sample vortices
+      addVortex(0.125, 0., -1);
+      addVortex(-0.125, 0., 1);
+      addVortex(-0.0625, 0.10825318, -1);
+      addVortex(0.0625, -0.10825318, 1); 
+      addVortex(-0.0625, -0.10825318, -1);
+      addVortex(0.0625, 0.10825318, 1);
     }
 
     function toggleAnimation() {
@@ -337,18 +344,18 @@ async function run() {
     }
 
     function updateVortices() {
-      for (let i=0; i<vortices.length; i++) {
-        let val = solution.next();
-        if (val.done) { 
-            paused = true;
-            playbutton.classList.toggle("paused");
-            throw up;
-        }
-        vortices[i].x = val.value;
+      let val = solution.next();
+      if (val.done) { 
+        paused = true;
+        playbutton.classList.toggle("paused");
+        throw up;
       }
-      for (let i=0; i<vortices.length; i++) {
-        let val = solution.next();
-        vortices[i].y = val.value;
+      t = val.value; 
+      for (let i = 0; i < vortices.length; i++) {
+        vortices[i].x = solution.next().value;            
+      }
+      for (let i = 0; i < vortices.length; i++) {
+        vortices[i].y = solution.next().value;
       }
     }
 
@@ -360,13 +367,13 @@ async function run() {
         clearInterval(timer);
         if (just_started) {
           var gamma = new Float64Array(vortices.length);
-          var z = new Float64Array(2*vortices.length);
-          for (let i=0; i<vortices.length; i++) {
+          var z = new Float64Array(2 * vortices.length);
+          for (let i = 0; i < vortices.length; i++) {
             gamma[i] = vortices[i].gamma;
             z[i] = vortices[i].x;
             z[i + vortices.length] = vortices[i].y;
           }
-          solution = NVortexProblem.new(gamma, z).slice(1.0).values();    
+          solution = NVortexProblem.new(gamma, z).slice(10.0).values();    
           just_started = false;
         }
         try {
@@ -379,7 +386,7 @@ async function run() {
         }
       }
     }
-
+    
     initDisplay();
     mainLoop();
 }
