@@ -2,9 +2,11 @@ import init, { NVortexProblem } from './pkg/vortex_dynamics.js';
 
 async function run() {
     const wasm = await init();
+    var solution;
     var canvas;
     var ctx;
     var vortices;
+    var timer;
     // Hold canvas information
     var WIDTH;
     var HEIGHT;
@@ -12,7 +14,6 @@ async function run() {
      // how often, in milliseconds, we check to see if a redraw is needed
     var INTERVAL = 20;
     var isDrag = false;
-    var isResizeDrag = false;
     var mx, my; // mouse coordinates
      // when set to true, the canvas will redraw everything
      // canvasValid = false; just sets this to false right now
@@ -33,6 +34,9 @@ async function run() {
     var stylePaddingLeft, stylePaddingTop, styleBorderLeft, styleBorderTop;
     // Animation starting / stopping
     var paused = true;
+    var just_started = true;
+    var playbutton = document.querySelector(".button");
+    var frame;
     // Context menu
     const menu = document.querySelector(".contextmenu");
     let menuVisible = false;
@@ -41,11 +45,10 @@ async function run() {
       this.x = 0;
       this.y = 0;
       this.gamma = 1;
-      this.fill = '#444444';
     }
 
     Vortex.prototype = {
-      draw: function(context, optionalColor) {
+      draw: function(context) {
         if (context === gctx) {
           context.fillStyle = 'black'; // always want black for the ghost canvas
         } else {
@@ -156,7 +159,6 @@ async function run() {
     // It only ever does something if the canvas gets invalidated by our code
     function mainDraw() {
       if (canvasValid) { return }
-      console.log("Draw");
       clear(ctx);
       // draw domain boundary
       ctx.beginPath();
@@ -174,17 +176,18 @@ async function run() {
 
     // Happens when the mouse is moving inside the canvas
     function onMouseMove(e){
-      if (selectVortex(e)) { canvasValid = false;; }
+      if (selectVortex(e)) { 
+          canvasValid = false; 
+          this.style.cursor = 'grab';
+      } else {
+          this.style.cursor = 'auto';
+      }
       if (isDrag) {
         getMouse(e);
         var math_coords = toMathCoordinates(mx - offsetx, my - offsety);
         mySel.x = math_coords[0];
         mySel.y = math_coords[1];
         canvasValid = false;;
-      }
-      getMouse(e);
-      if (mySel !== null) {
-        this.style.cursor = 'auto';
       }
     }
 
@@ -321,29 +324,59 @@ async function run() {
       canvas.onmousemove = onMouseMove;
       canvas.addEventListener("contextmenu", onRightClick);
       document.getElementById("delete-vortex").onclick = removeVortex;
-      // add three starting vortices
-      addVortex(-1/2, 1/4, -.66);
-      addVortex(2/3, 1/2, .66);
-      addVortex(0, 0, -.25);
+      playbutton.onclick = toggleAnimation;
+      addVortex(-.1, 0, 1);
+      addVortex(.1, 0, -1);
     }
 
-    function togglePause() {
-      if (paused) {
-        // 
+    function toggleAnimation() {
+        playbutton.classList.toggle("paused");
+        paused = !paused;
+        requestAnimationFrame(mainLoop);
+        return false;
+    }
+
+    function updateVortices() {
+      for (let i=0; i<vortices.length; i++) {
+        let val = solution.next();
+        if (val.done) { 
+            paused = true;
+            playbutton.classList.toggle("paused");
+            throw up;
+        }
+        vortices[i].x = val.value;
       }
-      paused = !paused;
-      mainLoop();
+      for (let i=0; i<vortices.length; i++) {
+        let val = solution.next();
+        vortices[i].y = val.value;
+      }
     }
 
     function mainLoop() {
       if (paused) {
-        // make mainDraw() fire every INTERVAL milliseconds
-        setInterval(mainDraw, INTERVAL);
+        timer = setInterval(mainDraw, INTERVAL);
+        just_started = true;
       } else {
-        updateVortices();
-        canvasValid = false;
-        mainDraw();
-        requestAnimationFrame(mainLoop);
+        clearInterval(timer);
+        if (just_started) {
+          var gamma = new Float64Array(vortices.length);
+          var z = new Float64Array(2*vortices.length);
+          for (let i=0; i<vortices.length; i++) {
+            gamma[i] = vortices[i].gamma;
+            z[i] = vortices[i].x;
+            z[i + vortices.length] = vortices[i].y;
+          }
+          solution = NVortexProblem.new(gamma, z).slice(1.0).values();    
+          just_started = false;
+        }
+        try {
+          updateVortices();
+          canvasValid = false;
+          mainDraw();
+          requestAnimationFrame(mainLoop);
+        } catch (up) {
+          toggleAnimation();  
+        }
       }
     }
 
