@@ -373,7 +373,7 @@ async function run() {
             z[i] = vortices[i].x;
             z[i + vortices.length] = vortices[i].y;
           }
-          solution = NVortexProblem.new(gamma, z).slice(10.0).values();    
+          solution = NVortexProblem.new(gamma, z).slice(10.0, 0.01).values();    
           just_started = false;
         }
         try {

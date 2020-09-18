@@ -1,6 +1,7 @@
 mod runge_kutta;
 use runge_kutta::{ RungeKuttaSolver, VectorField, Vector };
 use ndarray::{ arr1, s, ArrayView1 };
+use std::cmp::max;
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "wee_alloc")]
@@ -8,7 +9,8 @@ use wasm_bindgen::prelude::*;
 static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 const PI: f64 = 3.14159265358979323;
-const STEPSIZE: f64 = 0.001;
+const STEPSIZE: f64 = 0.01;
+const TOLERANCE: f64 = 0.0001;
 
 fn j_grad_g(x: f64, y: f64, u: f64, v: f64) -> Vector {
     // j_grad_g(x, y, u, v) is the product of the 2d symplectic matrix J with the gradient
@@ -69,17 +71,22 @@ impl NVortexProblem {
     pub fn new(gamma: &[f64], z: &[f64]) -> NVortexProblem {
         let gamma_vector = Vector::from(gamma.to_vec());
         let vector_field = VectorField::Autonomous(Box::new(move |z| hamiltonian_vectorfield(gamma_vector.to_owned(), z)));
-        let solution = RungeKuttaSolver::new(vector_field, 0., Vector::from(z.to_vec()), STEPSIZE);
+        let solution = RungeKuttaSolver::new(vector_field, 0., Vector::from(z.to_vec()), STEPSIZE, TOLERANCE);
         NVortexProblem { solution: solution }
     }
     fn next(&mut self) -> Vec<f64> {
         self.solution.next().unwrap().to_vec()
     }
-    pub fn slice(&mut self, t_max: f64) -> Vec<f64> {
+    pub fn slice(&mut self, t_max: f64, stepsize: f64) -> Vec<f64> {
+        let stride: usize = max((stepsize / STEPSIZE - 1.).floor() as usize, 0);
         let mut result = Vec::<f64>::new();
         while self.solution.time() <= t_max {
-            result.push(self.solution.time() + STEPSIZE);
-            result.extend(self.next());
+            for _ in 0..stride {
+                self.next();
+            }
+            let next_x = self.next();
+            result.push(self.solution.time());
+            result.extend(next_x);
         }
         result
     }
