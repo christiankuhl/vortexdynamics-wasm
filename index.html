@@ -6,7 +6,6 @@
   <body>
     <script type="module" src="vortex_dynamics.js"></script>
     <div id="container">
-      <div class="button"></div>
       <div class="contextmenu">
         <ul class="contextmenu-options">
           <li class="contextmenu-option" id="delete-vortex">Delete vortex</li>
@@ -14,6 +13,10 @@
       </div>
       <canvas id="vortex-canvas" width=600px height=600px></canvas>
       <menu id="controls">
+        <div id="gamma-controls" class="ctrl-column left"></div>
+        <div class="ctrl-column right">
+          <div class="button"></div>
+        </div>
       </menu>
     </div>
   </body>

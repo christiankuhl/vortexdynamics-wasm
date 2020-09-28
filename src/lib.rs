@@ -1,7 +1,6 @@
 mod runge_kutta;
-use runge_kutta::{ RungeKuttaSolver, VectorField, Vector };
-use ndarray::{ arr1, s, ArrayView1 };
-use std::cmp::max;
+use ndarray::{arr1, s, ArrayView1};
+use runge_kutta::{RungeKuttaSolver, Vector, VectorField};
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "wee_alloc")]
@@ -10,7 +9,7 @@ static ALLOC: wee_alloc::WeeAlloc = wee_alloc::WeeAlloc::INIT;
 
 const PI: f64 = 3.14159265358979323;
 const STEPSIZE: f64 = 0.01;
-const TOLERANCE: f64 = 0.0001;
+const TOLERANCE: f64 = 1e-6;
 
 fn j_grad_g(x: f64, y: f64, u: f64, v: f64) -> Vector {
     // j_grad_g(x, y, u, v) is the product of the 2d symplectic matrix J with the gradient
@@ -18,7 +17,7 @@ fn j_grad_g(x: f64, y: f64, u: f64, v: f64) -> Vector {
     // Dirichlet Laplacian in the unit disk.
     let xnorm = x * x + y * y;
     if u == 0. && v == 0. && 0. < xnorm && xnorm < 1. {
-        return arr1(&[-y, x]) / (2. * PI * xnorm)
+        return arr1(&[-y, x]) / (2. * PI * xnorm);
     } else {
         let unorm = u * u + v * v;
         let prod = x * u + y * v;
@@ -36,25 +35,27 @@ fn j_grad_h(x: f64, y: f64) -> Vector {
     arr1(&[y, -x]) / (PI * (xnorm - 1.))
 }
 
-fn hamiltonian_vectorfield(gamma: Vector, z: Vector) -> Vector {
+fn hamiltonian_vectorfield(gamma: Vector, z: &Vector) -> Vector {
     let dim = gamma.len();
     let x = z.slice(s![0..dim]);
     let y = z.slice(s![dim..]);
     let mut tmp_result = Vector::zeros(2 * dim);
     let outer = gamma.iter().zip(x.iter()).zip(y.iter()).enumerate();
     for (j, ((&gamma_j, &x_j), &y_j)) in outer {
-        let mut slice = tmp_result.slice_mut(s![2*j..2*j+2]);
+        let mut slice = tmp_result.slice_mut(s![2 * j..2 * j + 2]);
         let gradhj = gamma_j * j_grad_h(x_j, y_j);
         slice += &ArrayView1::<f64>::from(&gradhj);
         let inner = gamma.iter().zip(x.iter()).zip(y.iter()).enumerate();
         for (i, ((&gamma_i, &x_i), &y_i)) in inner {
-            if i == j { continue; }
+            if i == j {
+                continue;
+            }
             let gradgij = 2. * gamma_i * j_grad_g(x_j, y_j, x_i, y_i);
             slice += &ArrayView1::<f64>::from(&gradgij);
         }
     }
     let mut result = Vector::zeros(2 * dim);
-    for j in 0 .. dim {
+    for j in 0..dim {
         result[j] = tmp_result[2 * j];
         result[j + dim] = tmp_result[2 * j + 1];
     }
@@ -63,31 +64,50 @@ fn hamiltonian_vectorfield(gamma: Vector, z: Vector) -> Vector {
 
 #[wasm_bindgen]
 pub struct NVortexProblem {
-    solution: RungeKuttaSolver
+    solution: RungeKuttaSolver,
 }
 
 #[wasm_bindgen]
 impl NVortexProblem {
     pub fn new(gamma: &[f64], z: &[f64]) -> NVortexProblem {
         let gamma_vector = Vector::from(gamma.to_vec());
-        let vector_field = VectorField::Autonomous(Box::new(move |z| hamiltonian_vectorfield(gamma_vector.to_owned(), z)));
-        let solution = RungeKuttaSolver::new(vector_field, 0., Vector::from(z.to_vec()), STEPSIZE, TOLERANCE);
+        let vector_field = VectorField::autonomous(Box::new(move |z| {
+            hamiltonian_vectorfield(gamma_vector.to_owned(), z)
+        }));
+        let solution = RungeKuttaSolver::new(
+            vector_field,
+            0.,
+            Vector::from(z.to_vec()),
+            TOLERANCE,
+            TOLERANCE,
+        );
         NVortexProblem { solution: solution }
     }
-    fn next(&mut self) -> Vec<f64> {
-        self.solution.next().unwrap().to_vec()
+    // pub fn next(&mut self) -> Vector {
+    //     self.solution.next().unwrap()
+    // }
+    pub fn mesh(&mut self, t_max: f64) -> Vec<f64> {
+        self.solution.on_mesh(t_max, STEPSIZE)
+        // let mut result = Vec::<f64>::new();
+        // while self.solution.time() < t_max {
+        //     result.extend(&self.solution.next().unwrap());
+        // }
+        // result
     }
-    pub fn slice(&mut self, t_max: f64, stepsize: f64) -> Vec<f64> {
-        let stride: usize = max((stepsize / STEPSIZE - 1.).floor() as usize, 0);
-        let mut result = Vec::<f64>::new();
-        while self.solution.time() <= t_max {
-            for _ in 0..stride {
-                self.next();
-            }
-            let next_x = self.next();
-            result.push(self.solution.time());
-            result.extend(next_x);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn bla() {
+        let mut p = NVortexProblem::new(&[1.], &[0.5, 0.]);
+        let q = p.mesh(10.);
+        for i in 0..q.len()/2 {
+            println!("{}, {}",  q[2*i], q[2*i+1]);
         }
-        result
+        assert!(false);      
     }
+
 }

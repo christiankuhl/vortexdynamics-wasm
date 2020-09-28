@@ -59,7 +59,7 @@
   box-sizing: border-box;
   width: 0;
   height: 74px;
-  border-color: transparent transparent transparent #202020;
+  border-color: transparent transparent transparent #4ca4fa;
   transition: 100ms all ease;
   cursor: pointer;
   border-style: solid;
@@ -70,7 +70,7 @@
   box-sizing: border-box;
   width: 0;
   height: 74px;
-  border-color: transparent transparent transparent #202020;
+  border-color: transparent transparent transparent #4ca4fa;
   transition: 100ms all ease;
   cursor: pointer;
   border-style: double;
@@ -78,10 +78,34 @@
 }
 
 .button:hover {
-  border-color: transparent transparent transparent #404040;
+  border-color: transparent transparent transparent #007ef8;
 }
 
 .paused:hover {
-  border-color: transparent transparent transparent #404040;
+  border-color: transparent transparent transparent #007ef8;
 }
 
+.ctrl-column {
+  float: left;
+  padding: 10px;
+}
+
+.left {
+  width: 80%;
+}
+
+.right {
+  width: 20%;
+}
+
+#controls {
+  display: flex;
+  width: 500px;
+  align-items: center;
+}
+
+#controls:after {
+  content: "";
+  display: table;
+  clear: both;
+}

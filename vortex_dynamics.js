@@ -4,6 +4,7 @@ async function run() {
     const wasm = await init();
     var solution;
     var t;
+    var tmax = 5;
     var canvas;
     var ctx;
     var vortices;
@@ -21,7 +22,6 @@ async function run() {
      // we want to call canvasValid = false; whenever we make a change
     var canvasValid = false;
     // The node (if any) being selected.
-    // If in the future we want to select multiple objects, this will get turned into an array
     var mySel = null;
     var myHover = null;
     // we use a fake canvas to draw individual shapes for selection testing
@@ -98,7 +98,7 @@ async function run() {
     }
 
     function reorg() {
-      const controls = document.getElementById("controls");
+      const controls = document.getElementById("gamma-controls");
       while (controls.lastChild) {
         controls.lastChild.remove();
       }
@@ -128,9 +128,9 @@ async function run() {
                                 e.target.label.innerHTML = gammaExpr(e.target);
                                 canvasValid = false;;
                               };
-      div.appendChild(slider);
       div.appendChild(label);
-      document.getElementById("controls").appendChild(div);
+      div.appendChild(slider);      
+      document.getElementById("gamma-controls").appendChild(div);
     }
 
     function gammaExpr(slider) {
@@ -328,12 +328,13 @@ async function run() {
       playbutton.onclick = toggleAnimation;
       
       // Add sample vortices
-      addVortex(0.125, 0., -1);
-      addVortex(-0.125, 0., 1);
-      addVortex(-0.0625, 0.10825318, -1);
-      addVortex(0.0625, -0.10825318, 1); 
-      addVortex(-0.0625, -0.10825318, -1);
-      addVortex(0.0625, 0.10825318, 1);
+      addVortex(0.125, 0., -.75);
+      addVortex(-0.125, 0., .75);
+      addVortex(-0.0625, 0.10825318, -.75);
+      addVortex(0.0625, -0.10825318, .75); 
+      addVortex(-0.0625, -0.10825318, -.75);
+      addVortex(0.0625, 0.10825318, .75);
+      addVortex(0., 0., 1.);
     }
 
     function toggleAnimation() {
@@ -343,19 +344,22 @@ async function run() {
         return false;
     }
 
+    function done() {
+      paused = true;
+      playbutton.classList.toggle("paused");
+      throw up;
+    }
+
     function updateVortices() {
-      let val = solution.next();
-      if (val.done) { 
-        paused = true;
-        playbutton.classList.toggle("paused");
-        throw up;
-      }
-      t = val.value; 
       for (let i = 0; i < vortices.length; i++) {
-        vortices[i].x = solution.next().value;            
+        let val = solution.next();
+        if (val.done) { done() }
+        vortices[i].x = val.value;            
       }
       for (let i = 0; i < vortices.length; i++) {
-        vortices[i].y = solution.next().value;
+        let val = solution.next();
+        if (val.done) { done() }
+        vortices[i].y = val.value;
       }
     }
 
@@ -373,7 +377,7 @@ async function run() {
             z[i] = vortices[i].x;
             z[i + vortices.length] = vortices[i].y;
           }
-          solution = NVortexProblem.new(gamma, z).slice(10.0, 0.01).values();    
+          solution = NVortexProblem.new(gamma, z).mesh(tmax).values();    
           just_started = false;
         }
         try {
@@ -382,7 +386,7 @@ async function run() {
           mainDraw();
           requestAnimationFrame(mainLoop);
         } catch (up) {
-          toggleAnimation();  
+          requestAnimationFrame(mainLoop);
         }
       }
     }

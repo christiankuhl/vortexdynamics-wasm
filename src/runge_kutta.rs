@@ -1,65 +1,246 @@
-// This implements a simple Runge-Kutta-Fehlberg method. 
-// Cf. https://en.wikipedia.org/wiki/Runge%E2%80%93Kutta%E2%80%93Fehlberg_method.
+// This implements a simple Runge-Kutta method, more specifically the variant
+// known as DOPRI5(4), cf. https://en.wikipedia.org/wiki/Dormand%E2%80%93Prince_method
+// supplemented by the adaptive step size algorithm outlined in the paper
+// https://www.researchgate.net/publication/226932720.
 
 use ndarray::Array1;
-pub type Vector = Array1<f64>;
+use std::ops::Deref;
 
-pub enum VectorField {
-    Autonomous(Box<dyn Fn(Vector) -> Vector>),
-    NonAutonomous(Box<dyn Fn(f64, Vector) -> Vector>)
+const A: [[f64; 6]; 6] = [
+    [1. / 5., 0., 0., 0., 0., 0.],
+    [3. / 40., 9. / 40., 0., 0., 0., 0.],
+    [44. / 45., -56. / 15., 32. / 9., 0., 0., 0.],
+    [
+        19372. / 6561.,
+        -25360. / 2187.,
+        64448. / 6561.,
+        -212. / 729.,
+        0.,
+        0.,
+    ],
+    [
+        9017. / 3168.,
+        -355. / 33.,
+        46732. / 5247.,
+        49. / 176.,
+        -5103. / 18656.,
+        0.,
+    ],
+    [
+        35. / 384.,
+        0.,
+        500. / 1113.,
+        125. / 192.,
+        -2187. / 6784.,
+        11. / 84.,
+    ],
+];
+const B: [f64; 7] = [
+    35. / 384.,
+    0.,
+    500. / 1113.,
+    125. / 192.,
+    -2187. / 6784.,
+    11. / 84.,
+    0.,
+];
+const DELTA_B: [f64; 7] = [
+    71.0 / 57600.0,
+    0.0,
+    -71.0 / 16695.0,
+    71.0 / 1920.0,
+    -686.0 / 13487.0,
+    22.0 / 525.0,
+    -1.0 / 40.0,
+];
+const C: [f64; 6] = [0.2, 0.3, 0.8, 8. / 9., 1., 1.];
+const D: [f64; 7] = [
+    -12715105075.0 / 11282082432.0,
+    0.0,
+    87487479700.0 / 32700410799.0,
+    -10690763975.0 / 1880347072.0,
+    701980252875.0 / 199316789632.0,
+    -1453857185.0 / 822651844.0,
+    69997945.0 / 29380423.0,
+];
+const KAPPA: f64 = 0.5;
+const ALPHA: f64 = 0.17;
+const BETA: f64 = 0.04;
+const MAX_FACTOR: f64 = 10.0;
+const MIN_FACTOR: f64 = 0.2;
+const THETA: f64 = 0.9;
+const EPSILON0: f64 = 1e-10;
+const EPSILON1: f64 = 1e-15;
+const H0: f64 = 1e-6;
+const HMAX: f64 = 0.1;
+
+pub type Vector = Array1<f64>;
+type AutonomousVectorField = Box<dyn Fn(&Vector) -> Vector>;
+type NonAutonomousVectorField = Box<dyn Fn(f64, &Vector) -> Vector>;
+
+fn copy(v: &Vector) -> Vector {
+    let mut w = Vector::zeros(v.len());
+    w.assign(&v);
+    w
 }
 
-const A: [[f64; 5]; 5] = [[0.25, 0., 0., 0., 0.], 
-                           [3./32., 9./32., 0., 0., 0.],
-                           [1932./2197., -7200./2197., 7296./2197., 0., 0.],
-                           [439./216., -8., 3680./513., -845./4104., 0.],
-                           [-8./27., 2., -3544./2565., 1859./4104., -0.275]];
-const B: [f64; 6] = [16./135., 0., 6656./12825., 28561./56430., -0.18, 2./55.];
-const DELTA_B: [f64; 6] = [16./135. - 25./216. , 0., 6656./12825. - 1408./2565., 28561./56430. - 2197./4104., 0.02,	2./55.];
-const C: [f64; 5] = [0.25, 0.375, 12./13., 1., 0.5];
+fn abs(v: &Vector) -> f64 {
+    v.dot(v).sqrt()
+}
+
+pub struct VectorField {
+    f: NonAutonomousVectorField,
+}
+
+impl VectorField {
+    pub fn autonomous(f: AutonomousVectorField) -> VectorField {
+        VectorField {
+            f: Box::new(move |_t: f64, x: &Vector| (*f)(x)),
+        }
+    }
+    pub fn new(f: NonAutonomousVectorField) -> VectorField {
+        VectorField { f: f }
+    }
+}
+
+impl Deref for VectorField {
+    type Target = NonAutonomousVectorField;
+    fn deref(&self) -> &Self::Target {
+        &self.f
+    }
+}
 
 pub struct RungeKuttaSolver {
-    f: Box<dyn Fn(f64, Vector) -> Vector>,  // The vector field in question
-    h: f64,                                 // Current stepsize
-    tn: f64,                                // Current time
-    xn: Vector,                             // Current solution vector
-    tol: f64,                               // Local error tolerance
-    dim: usize                              // Dimension of the vector field
+    f: VectorField,                             // The vector field in question
+    h: f64,                                     // Current stepsize
+    tn: f64,                                    // Current time
+    xn: Vector,                                 // Current solution vector
+    k: [Vector; 7],                             // Current quadrature values
+    r: [Vector; 5],                             // Coefficients for dense output
+    norm: Box<dyn Fn(&Vector, &Vector)->f64>,   // Error measurment derived from user input atol and rtol
+    en: f64,                                    // Last accepted error
+    dim: usize,                                 // Dimension of the vector field
+    reject: bool,                               // Last attempt was rejected
 }
 
 impl RungeKuttaSolver {
-    pub fn new(vector_field: VectorField, t0: f64, x0: Vector, step_size: f64, tolerance: f64) -> RungeKuttaSolver {
+    pub fn new(f: VectorField, t0: f64, x0: Vector, rtol: f64, atol: f64) -> RungeKuttaSolver {
         let dim = x0.len();
-        let f = match vector_field { VectorField::Autonomous(vector_field) => { Box::new(move |_t: f64, x: Vector| (*vector_field)(x)) },
-                                     VectorField::NonAutonomous(vector_field) => vector_field };
-        RungeKuttaSolver { f: f, tn: t0, xn: x0, h: step_size, dim: dim, tol: tolerance }
-    }
-    pub fn time(&self) -> f64 { self.tn }        
-    fn approximate(&self) -> (Vector, f64) {
-        let mut x_tmp = Vector::zeros(self.dim);
-        x_tmp.assign(&self.xn);
-        let k0 = (*self.f)(self.tn, x_tmp);
-        let mut k = [k0, Vector::zeros(self.dim), Vector::zeros(self.dim), Vector::zeros(self.dim), 
-                     Vector::zeros(self.dim), Vector::zeros(self.dim), Vector::zeros(self.dim)];
-        for (j, c) in C.iter().enumerate() {
-            let delta_x: Vector = A[j][0 .. j+1].iter().zip(&k[0 .. j+1])
-                                    .map(|(&aji, ki)| self.h * aji * ki)
-                                    .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
-            let mut x_tmp = Vector::zeros(self.dim);
-            x_tmp.assign(&self.xn);
-            k[j + 1] = (*self.f)(self.tn + c * self.h, delta_x + x_tmp);
+        let norm = move |x: &Vector, x0: &Vector| {
+            x.iter()
+                .zip(x0)
+                .map(|(xi, x0i)| (xi / (0.1 * atol + x0i.abs() * 0.1 * rtol)).powi(2))
+                .sum::<f64>()
+                .sqrt()
+        };
+        let h = RungeKuttaSolver::initial_stepsize(&f, t0, &x0, &norm);
+        RungeKuttaSolver {
+            f: f,
+            tn: t0,
+            xn: x0,
+            h: h,
+            k: [Vector::zeros(dim), Vector::zeros(dim), Vector::zeros(dim), Vector::zeros(dim),
+                Vector::zeros(dim), Vector::zeros(dim), Vector::zeros(dim)],
+            r: [Vector::zeros(dim), Vector::zeros(dim), Vector::zeros(dim), Vector::zeros(dim),
+                Vector::zeros(dim)],
+            dim: dim,
+            norm: Box::new(norm),
+            en: 0.,
+            reject: false,
         }
-        let mut x_tmp = Vector::zeros(self.dim);
-        x_tmp.assign(&self.xn);
-        let xn = x_tmp + &B.iter().zip(&k)
-                            .map(|(&bi, ki)| self.h * bi * ki)
-                            .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
-        let eps = &DELTA_B.iter().zip(&k)
-                    .map(|(&bi, ki)| self.h * bi * ki)
-                    .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
-        let err = eps.dot(eps).sqrt();
-        println!("{}, {}, {}", err, self.tol, self.h);
-        (xn, err)
+    }
+
+    pub fn time(&self) -> f64 {
+        self.tn
+    }
+
+    pub fn on_mesh(&mut self, t_max: f64, stepsize: f64) -> Vec<f64> {
+        let capacity = ((t_max - self.tn) / stepsize).ceil() as usize;
+        let mut result = Vec::<f64>::with_capacity(capacity);
+        let mut t = 0.;
+        while self.tn <= t_max {
+            t += stepsize;
+            let mut r = self.r.clone();
+            let mut h = self.h;
+            let mut tn = self.tn;
+            while self.tn + self.h <= t {
+                r = self.r.clone();
+                h = self.h;
+                tn = self.tn;
+                self.next();
+            }
+            let theta = (t - tn) / h;
+            let theta1 = 1. - theta;
+            let x = copy(&r[0]) + copy(&r[1]) * theta + copy(&r[2]) * theta * theta1 
+                    + copy(&r[3]) * theta.powi(2) * theta1 + copy(&r[4]) * theta.powi(2) * theta1.powi(2);
+            result.extend(x.iter());
+        }
+        result
+    }
+
+    fn initial_stepsize(f: &VectorField, t0: f64, x0: &Vector, norm: &dyn Fn(&Vector, &Vector) -> f64) -> f64 {
+        let f0 = f(t0, x0);
+        let d0 = norm(x0, x0);
+        let d1 = norm(&f0, x0);
+        let h0 = if d0 < EPSILON0 || d1 < EPSILON0 {
+            H0
+        } else {
+            1e-2 * d0 / d1
+        };
+        let x1 = x0 + &(h0 * &f0);
+        let f1 = f(t0 + h0, &x1);
+        let d2 = norm(&(f1 - f0), x0) / h0;
+        let h1 = if d1 < EPSILON1 && d2 < EPSILON1 {
+            H0.max(1e-3 * h0)
+        } else {
+            1e-2 / (d1.max(d2)).powf(0.2)
+        };
+        (100.0 * h0).min(h1).min(HMAX)
+    }
+
+    fn approximate(&mut self) -> (Vector, f64) {
+        let k0 = (self.f)(self.tn, &self.xn);
+        self.k = [
+            k0,
+            Vector::zeros(self.dim),
+            Vector::zeros(self.dim),
+            Vector::zeros(self.dim),
+            Vector::zeros(self.dim),
+            Vector::zeros(self.dim),
+            Vector::zeros(self.dim),
+        ];
+        for (j, c) in C.iter().enumerate() {
+            let delta_x: Vector = A[j][0..j + 1]
+                .iter()
+                .zip(&self.k[0..j + 1])
+                .map(|(&aji, ki)| self.h * aji * ki)
+                .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
+            self.k[j + 1] = (self.f)(self.tn + c * self.h, &(delta_x + &self.xn));
+        }
+        let xn = copy(&self.xn)
+            + &B.iter()
+                .zip(&self.k)
+                .map(|(&bi, ki)| self.h * bi * ki)
+                .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
+        let eps_x = &DELTA_B
+            .iter()
+            .zip(&self.k)
+            .map(|(&bi, ki)| self.h * bi * ki)
+            .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
+        let x_test = (&self.xn).iter().zip(&xn).map(|(x1i, &x2i)| x1i.abs().max(x2i)).collect();
+        let eps = (*self.norm)(&eps_x, &x_test) / (self.dim as f64).sqrt();
+        (xn, eps)
+    }
+
+    fn stepsize_factor(&self, eps: f64) -> f64 {
+        let mut f = THETA * eps.powf(-ALPHA);
+        if eps < 1. {
+            f *= (self.en.powf(BETA)).max(KAPPA.powf(BETA));
+            if self.reject {
+                f = f.min(1.);
+            }
+        }
+        (f.max(MIN_FACTOR)).min(MAX_FACTOR)
     }
 }
 
@@ -68,74 +249,102 @@ impl Iterator for RungeKuttaSolver {
     fn next(&mut self) -> Option<Vector> {
         let (x_tmp, eps) = self.approximate();
         let old_h = self.h;
-        self.h *= 0.9 * (self.tol / eps).powf( if eps < self.tol { 0.2 } else { 0.25 });
-        if eps < self.tol {
+        self.h *= self.stepsize_factor(eps);
+        self.h = self.h;
+        self.r[0] = copy(&self.xn);
+        if eps < 1. {
             self.xn = x_tmp;
             self.tn += old_h;
-        } 
-        else {
-            self.xn = self.approximate().0;
+            self.en = eps;
+            self.reject = false;
+        } else {
+            self.reject = true;
+            let retry = self.approximate();
+            self.xn = retry.0;
             self.tn += self.h;
         }
-        let mut result = Vector::zeros(self.dim);
-        result.assign(&self.xn);
-        Some(result)
+        self.r[1] = &self.xn - &self.r[0];
+        self.r[2] = &self.k[0] * self.h - &self.r[1];
+        self.r[3] = 2. * &self.r[1] - (&self.k[0] + &self.k[1]) * self.h;
+        self.r[4] = D.iter()
+                        .zip(&self.k)
+                        .map(|(&di, ki)| self.h * di * ki)
+                        .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
+        Some(copy(&self.xn))
     }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use ndarray::{ arr1, arr2 };
+    use ndarray::{arr1, arr2};
 
-    fn rotate(v: Vector) -> Vector {
-        arr2(&[[0., -1.], [1., 0.]]).dot(&v)
+    fn mirror(v: &Vector) -> Vector {
+        arr2(&[[0., -1.], [1., 0.]]).dot(v)
     }
 
-    fn squash(v: Vector) -> Vector {
-        arr2(&[[2., 0.], [0., -1.]]).dot(&v)
+    fn squash(v: &Vector) -> Vector {
+        arr2(&[[2., 0.], [0., -1.]]).dot(v)
+    }
+
+    fn rotation_solution(t: f64) -> Vector {
+        arr1(&[t.cos(), t.sin()])
+    }
+
+    fn hyperbolic_solution(t: f64) -> Vector {
+        arr1(&[(2.0 * t).exp(), (-t).exp()])
     }
 
     fn test_value_against_accurate(time: f64, solution: Vector, accurate: Vector, tolerance: f64) {
-        println!("t={} approx: {} accurate: {}", time, solution, accurate);
-        let abs_err = solution - accurate;
-        let error_small = (abs_err).dot(&abs_err).sqrt() < tolerance;
-        assert!(error_small);
+        let abs_error = abs(&(&solution - &accurate));
+        let rel_error = abs(&solution) / abs(&accurate) - 1.0;
+        dbg!(time, &solution, &accurate, &abs_error, &rel_error);
+        assert!(abs_error < tolerance || rel_error < tolerance);
     }
 
-    fn test_solver_against_analytic() {
-        
+    fn test_solver_against_analytic(
+        vector_field: VectorField,
+        analytic: Solution,
+        t_min: f64,
+        x0: Vector,
+        t_max: f64,
+        tolerance: f64,
+    ) {
+        let mut solution = RungeKuttaSolver::new(vector_field, t_min, x0, tolerance, tolerance);
+        let mut approx;
+        let mut time;
+        while solution.time() < t_max {
+            approx = solution.next().unwrap();
+            time = solution.time();
+            test_value_against_accurate(time, approx, (*analytic)(time), tolerance);
+        }
     }
 
     #[test]
     fn rotation_solved_accurately() {
-        let rotation = VectorField::Autonomous(Box::new(rotate));
-        let mut solution = RungeKuttaSolver::new(rotation, 0., arr1(&[1., 0.]), 1e-2, 1e-13);
-        let mut approx;
-        let mut time;
-        while solution.time() < 2. * 3.141592653 {
-            approx = solution.next().unwrap();
-            time = solution.time();
-            test_value_against_accurate(time, approx[0], time.cos(), 1e-12);
-            test_value_against_accurate(time, approx[1], time.sin(), 1e-12);
-        }
+        let vector_field = VectorField::autonomous(Box::new(mirror));
+        let analytic = Box::new(rotation_solution);
+        test_solver_against_analytic(
+            vector_field,
+            analytic,
+            0.,
+            arr1(&[1., 0.]),
+            2.0 * 3.141592653,
+            1e-10,
+        );
     }
 
     #[test]
     fn linear_diagonal_solved_accurately() {
-        let linear = VectorField::Autonomous(Box::new(squash));
-        let mut solution = RungeKuttaSolver::new(linear, 0., arr1(&[1., 1.]), 1e-2, 1e-10);
-        let mut time;
-        let mut approx;
-        let mut steps_taken = 0;
-        while solution.time() < 5.0 {
-            approx = solution.next().unwrap();
-            time = solution.time();
-            test_value_against_accurate(time, approx[0], (2.0 * time).exp(), 1e-6);
-            test_value_against_accurate(time, approx[1], (-time).exp(), 1e-6);
-            steps_taken += 1;
-        }
-        println!("Steps taken: {}", steps_taken);
-        // assert!(steps_taken <= 500);
+        let vector_field = VectorField::autonomous(Box::new(squash));
+        let analytic = Box::new(hyperbolic_solution);
+        test_solver_against_analytic(
+            vector_field,
+            analytic,
+            0.,
+            arr1(&[1., 1.]),
+            2. * 2.71828,
+            1e-10,
+        );
     }
 }
