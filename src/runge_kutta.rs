@@ -85,6 +85,10 @@ pub fn copy(v: &Vector) -> Vector {
     w
 }
 
+fn abs(v: &Vector) -> f64 {
+    v.dot(v).sqrt()
+}
+
 pub struct VectorField {
     f: NonAutonomousVectorField,
 }
