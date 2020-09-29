@@ -1,6 +1,6 @@
 mod runge_kutta;
-use ndarray::{arr1, s, ArrayView1};
-use runge_kutta::{RungeKuttaSolver, Vector, VectorField};
+use ndarray::{arr1, s};
+use runge_kutta::{RungeKuttaSolver, Vector, VectorField, kahan_summation, copy};
 use wasm_bindgen::prelude::*;
 
 #[cfg(feature = "wee_alloc")]
@@ -39,25 +39,23 @@ fn hamiltonian_vectorfield(gamma: Vector, z: &Vector) -> Vector {
     let dim = gamma.len();
     let x = z.slice(s![0..dim]);
     let y = z.slice(s![dim..]);
-    let mut tmp_result = Vector::zeros(2 * dim);
+    let mut result = Vector::zeros(2 * dim);
     let outer = gamma.iter().zip(x.iter()).zip(y.iter()).enumerate();
     for (j, ((&gamma_j, &x_j), &y_j)) in outer {
-        let mut slice = tmp_result.slice_mut(s![2 * j..2 * j + 2]);
-        let gradhj = gamma_j * j_grad_h(x_j, y_j);
-        slice += &ArrayView1::<f64>::from(&gradhj);
+        let mut sum = gamma_j * j_grad_h(x_j, y_j);
         let inner = gamma.iter().zip(x.iter()).zip(y.iter()).enumerate();
+        let mut err = Vector::zeros(2);
         for (i, ((&gamma_i, &x_i), &y_i)) in inner {
             if i == j {
                 continue;
             }
             let gradgij = 2. * gamma_i * j_grad_g(x_j, y_j, x_i, y_i);
-            slice += &ArrayView1::<f64>::from(&gradgij);
+            let ksum = kahan_summation((copy(&sum), copy(&err)), gradgij);
+            sum = ksum.0;
+            err = ksum.1;
         }
-    }
-    let mut result = Vector::zeros(2 * dim);
-    for j in 0..dim {
-        result[j] = tmp_result[2 * j];
-        result[j + dim] = tmp_result[2 * j + 1];
+        result[j] = sum[0];
+        result[j + dim] = sum[1];
     }
     result
 }
@@ -83,16 +81,8 @@ impl NVortexProblem {
         );
         NVortexProblem { solution: solution }
     }
-    // pub fn next(&mut self) -> Vector {
-    //     self.solution.next().unwrap()
-    // }
     pub fn mesh(&mut self, t_max: f64) -> Vec<f64> {
         self.solution.on_mesh(t_max, STEPSIZE)
-        // let mut result = Vec::<f64>::new();
-        // while self.solution.time() < t_max {
-        //     result.extend(&self.solution.next().unwrap());
-        // }
-        // result
     }
 }
 
@@ -107,7 +97,7 @@ mod tests {
         for i in 0..q.len()/2 {
             println!("{}, {}",  q[2*i], q[2*i+1]);
         }
-        assert!(false);      
+        assert!(true);      
     }
 
 }

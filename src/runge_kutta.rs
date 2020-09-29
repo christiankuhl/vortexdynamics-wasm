@@ -77,20 +77,24 @@ const HMAX: f64 = 0.1;
 pub type Vector = Array1<f64>;
 type AutonomousVectorField = Box<dyn Fn(&Vector) -> Vector>;
 type NonAutonomousVectorField = Box<dyn Fn(f64, &Vector) -> Vector>;
+type Solution = Box<dyn Fn(f64) -> Vector>;
 
-fn copy(v: &Vector) -> Vector {
+pub fn copy(v: &Vector) -> Vector {
     let mut w = Vector::zeros(v.len());
     w.assign(&v);
     w
 }
 
-fn abs(v: &Vector) -> f64 {
-    v.dot(v).sqrt()
-}
-
 pub struct VectorField {
     f: NonAutonomousVectorField,
 }
+
+pub fn kahan_summation((sum, err): (Vector, Vector), elem: Vector) -> (Vector, Vector) {
+    let y = elem - err;
+    let total = &sum + &y;
+    (copy(&total), (total - sum) - y)
+}
+
 
 impl VectorField {
     pub fn autonomous(f: AutonomousVectorField) -> VectorField {
@@ -214,19 +218,19 @@ impl RungeKuttaSolver {
                 .iter()
                 .zip(&self.k[0..j + 1])
                 .map(|(&aji, ki)| self.h * aji * ki)
-                .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
+                .fold((Vector::zeros(self.dim), Vector::zeros(self.dim)), kahan_summation).0;
             self.k[j + 1] = (self.f)(self.tn + c * self.h, &(delta_x + &self.xn));
         }
         let xn = copy(&self.xn)
             + &B.iter()
                 .zip(&self.k)
                 .map(|(&bi, ki)| self.h * bi * ki)
-                .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
+                .fold((Vector::zeros(self.dim), Vector::zeros(self.dim)), kahan_summation).0;
         let eps_x = &DELTA_B
             .iter()
             .zip(&self.k)
             .map(|(&bi, ki)| self.h * bi * ki)
-            .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
+            .fold((Vector::zeros(self.dim), Vector::zeros(self.dim)), kahan_summation).0;
         let x_test = (&self.xn).iter().zip(&xn).map(|(x1i, &x2i)| x1i.abs().max(x2i)).collect();
         let eps = (*self.norm)(&eps_x, &x_test) / (self.dim as f64).sqrt();
         (xn, eps)
@@ -269,7 +273,7 @@ impl Iterator for RungeKuttaSolver {
         self.r[4] = D.iter()
                         .zip(&self.k)
                         .map(|(&di, ki)| self.h * di * ki)
-                        .fold(Vector::zeros(self.dim), |sum, elem| sum + elem);
+                        .fold((Vector::zeros(self.dim), Vector::zeros(self.dim)), kahan_summation).0;
         Some(copy(&self.xn))
     }
 }
@@ -346,5 +350,18 @@ mod tests {
             2. * 2.71828,
             1e-10,
         );
+    }
+
+    #[test]
+    fn kahan_summation_effective() {
+        let summands = [
+            arr1(&[10000.0f64]), arr1(&[3.14159f64]), arr1(&[2.71828f64]), arr1(&[3.14159f64]), 
+            arr1(&[2.71828f64]), arr1(&[3.14159f64]), arr1(&[2.71828f64]),
+        ];
+        let kahan_sum = summands.iter().fold((Vector::zeros(1), Vector::zeros(1)), |sum, elem| kahan_summation(sum, copy(&elem)));
+        let normal_sum = summands.iter().fold(Vector::zeros(1), |sum, elem| sum + elem);
+        let err = (10017.57961f64 - normal_sum[0]).abs();
+        assert_eq!(10017.57961f64, kahan_sum.0[0]);
+        assert!(err > kahan_sum.1[0]);
     }
 }
