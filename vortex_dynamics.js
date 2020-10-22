@@ -1,7 +1,12 @@
 import init, { NVortexProblem } from './pkg/vortex_dynamics.js';
 
-async function run() {
+async function run(event) {
     const wasm = await init();
+    try {
+      var example = event.target.selectedOptions.item(0).vortices;
+    } catch (TypeError) {
+      var example = event.target.value;
+    }
     var solution;
     var t;
     var tmax = 5;
@@ -42,6 +47,8 @@ async function run() {
     const menu = document.querySelector(".contextmenu");
     let menuVisible = false;
 
+    document.getElementById("example").addEventListener("change", function(evt) { run(evt); });
+    
     function Vortex() {
       this.x = 0;
       this.y = 0;
@@ -188,7 +195,7 @@ async function run() {
         var math_coords = toMathCoordinates(mx - offsetx, my - offsety);
         mySel.x = math_coords[0];
         mySel.y = math_coords[1];
-        canvasValid = false;;
+        canvasValid = false;
       }
     }
 
@@ -328,14 +335,26 @@ async function run() {
       playbutton.onclick = toggleAnimation;
       
       // Add sample vortices
-      addVortex(0.125, 0., -.75);
-      addVortex(-0.125, 0., .75);
-      addVortex(-0.0625, 0.10825318, -.75);
-      addVortex(0.0625, -0.10825318, .75); 
-      addVortex(-0.0625, -0.10825318, -.75);
-      addVortex(0.0625, 0.10825318, .75);
-      addVortex(0., 0., 1.);
+      loadExample(example);
     }
+
+    function deleteVortices() {
+      const controls = document.getElementById("gamma-controls");
+      while (controls.lastChild) {
+        controls.lastChild.remove();
+      }
+      vortices = [];
+    }
+
+    function loadExample(example) {
+      console.log(example);
+      deleteVortices();
+      for (var i = 0; i < example.length; i++) {
+        const vortex = example[i];
+        addVortex(vortex.x, vortex.y, vortex.gamma);
+      }
+    }
+
 
     function toggleAnimation() {
         playbutton.classList.toggle("paused");
@@ -395,4 +414,17 @@ async function run() {
     mainLoop();
 }
 
-run();
+fetch("./examples.json").then(res => {
+  res.json().then(examples => {
+    var example_menu = document.example_menu.example;
+    for (var i = 0; i < examples.length; i++) {
+      var option = document.createElement("option");
+      option.text = examples[i].name;
+      option.vortices = examples[i].vortices;
+      example_menu.add(option);
+    }
+    var example = example_menu.options[example_menu.selectedIndex].vortices;
+    var event = {"target": {"value": example}};
+    run(event);
+  });
+});
