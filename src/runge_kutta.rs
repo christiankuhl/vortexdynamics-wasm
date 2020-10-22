@@ -85,10 +85,6 @@ pub fn copy(v: &Vector) -> Vector {
     w
 }
 
-fn abs(v: &Vector) -> f64 {
-    v.dot(v).sqrt()
-}
-
 pub struct VectorField {
     f: NonAutonomousVectorField,
 }
@@ -286,6 +282,10 @@ impl Iterator for RungeKuttaSolver {
 mod tests {
     use super::*;
     use ndarray::{arr1, arr2};
+
+    fn abs(v: &Vector) -> f64 {
+        v.dot(v).sqrt()
+    }
 
     fn mirror(v: &Vector) -> Vector {
         arr2(&[[0., -1.], [1., 0.]]).dot(v)
