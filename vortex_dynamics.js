@@ -1,4 +1,4 @@
-import init, { NVortexProblem } from './pkg/vortex_dynamics.js';
+import init, { NVortexProblem } from './vortex_dynamics.js';
 
 async function run() {
     const wasm = await init();
@@ -58,7 +58,10 @@ async function run() {
         // We can skip the drawing of elements that have moved off the screen:
         if (this.x > WIDTH || this.y > HEIGHT) return;
         if (this.x + this.w < 0 || this.y + this.h < 0) return;
-        // When selected (or hovered), the vortex receives an extra shadow
+        // When selected (or hovered), the vortex receives an extra shadow, 
+        // the corresponding Gamma control gets highlighted
+        var ctrl = document.getElementById("gamma" + this.index);
+        ctrl.classList.remove("gamma-highlight");
         if (mySel === this || myHover === this) {
           context.beginPath();
           var coords = toScreenCoordinates(this.x, this.y);
@@ -66,6 +69,7 @@ async function run() {
           context.strokeStyle = "gray";
           context.lineWidth = 3;
           context.stroke();
+          ctrl.classList.add("gamma-highlight")
         }
         // Vortex body
         context.beginPath();
@@ -135,7 +139,7 @@ async function run() {
 
     function gammaExpr(slider) {
       var value = parseFloat(slider.value).toFixed(2);
-      return `\\(\\Gamma_${slider.vortex.index + 1}=${value}\\)`
+      return `&#915;<sub>${slider.vortex.index + 1}</sub> = ${value}    `
     }
 
     function toMathCoordinates(x, y) {
@@ -267,8 +271,8 @@ async function run() {
       }
       if (mySel !== null) {
         const origin = {
-          left: e.pageX,
-          top: e.pageY
+          left: e.clientX,
+          top: e.clientY
         };
         setMenuPosition(origin);
         return false;
