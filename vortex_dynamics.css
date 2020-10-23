@@ -1,3 +1,7 @@
+#controls {
+  padding-left: 0px;
+}
+
 #controls input {
   -webkit-appearance: none;
   height: 7px;
@@ -87,20 +91,33 @@
 
 .ctrl-column {
   float: left;
-  padding: 10px;
+  padding: 0px;
+}
+
+.twocolumn {
+  margin-left: 0px;
+  width: 400px;
+  margin-top: 10px;
 }
 
 .left {
-  width: 80%;
+  width: 20%;
 }
 
 .right {
-  width: 20%;
+  width: 80%;
 }
 
 #controls {
   display: flex;
-  width: 500px;
+  width: 400px;
+  align-items: top;
+  padding-top: 10px;
+}
+
+.menu {
+  display: block;
+  width: 400px;
   align-items: center;
 }
 
@@ -111,5 +128,17 @@
 }
 
 .gamma-highlight {
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.05);
+}
+
+#container {
+  display: flex;
+  width: 1000px;
+  align-items: top;
+}
+
+#container:after {
+  content: "";
+  display: table;
+  clear: both;
 }

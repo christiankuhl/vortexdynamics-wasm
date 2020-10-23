@@ -1,6 +1,6 @@
 [ 
     {
-        "name": "Vortex crystal",
+        "name": "Alternating vortex crystal",
         "vortices": [
             {"x": 0.125, "y": 0.0, "gamma": -0.75},
             {"x": -0.125, "y": 0.0, "gamma": 0.75},
@@ -11,7 +11,18 @@
         ]
     },
     {
-        "name": "Rotating vortex crystal",
+        "name": "Vortex crystal",
+        "vortices": [
+            {"x": 0.125, "y": 0.0, "gamma": 0.75},
+            {"x": -0.125, "y": 0.0, "gamma": 0.75},
+            {"x": -0.0625, "y": 0.10825318, "gamma": 0.75},
+            {"x": 0.0625, "y": -0.10825318, "gamma": 0.75},
+            {"x": -0.0625, "y": -0.10825318, "gamma": 0.75},
+            {"x": 0.0625, "y": 0.10825318, "gamma": 0.75}
+        ]
+    },
+    {
+        "name": "Rotating alternating vortex crystal",
         "vortices": [
             {"x": 0.125, "y": 0.0, "gamma": -0.75},
             {"x": -0.125, "y": 0.0, "gamma": 0.75},
@@ -23,10 +34,31 @@
         ]
     },
     {
-        "name": "Vortex pair",
+        "name": "Billiard vortex pair",
         "vortices": [
-            {"x": 0.125, "y": 0.0, "gamma": -0.75},
-            {"x": -0.125, "y": 0.0, "gamma": 0.75}
+            {"x": 0.15, "y": 0.20, "gamma": -1},
+            {"x": 0.1, "y": 0.3, "gamma": 1}
+        ]
+    },
+    {
+        "name": "Unbalanced stable vortex pair",
+        "vortices": [
+            {"x": 0.75, "y": 0.0, "gamma": -1},
+            {"x": 0.85, "y": 0.0, "gamma": 0.2}
+        ]
+    },
+    {
+        "name": "Unbalanced billiard vortex pair",
+        "vortices": [
+            {"x": 0.35, "y": 0.0, "gamma": 0.8},
+            {"x": 0.45, "y": 0.0, "gamma": -1}
+        ]
+    },
+    {
+        "name": "Rotating stable vortex pair",
+        "vortices": [
+            {"x": 0.4, "y": 0.0, "gamma": 0.75},
+            {"x": 0.55, "y": 0.0, "gamma": 0.75}
         ]
     }
 ]

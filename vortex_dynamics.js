@@ -1,4 +1,4 @@
-import init, { NVortexProblem } from './vortex_dynamics.js';
+import init, { NVortexProblem } from './pkg/vortex_dynamics.js';
 
 async function run(event) {
     const wasm = await init();
@@ -351,7 +351,6 @@ async function run(event) {
     }
 
     function loadExample(example) {
-      console.log(example);
       deleteVortices();
       for (var i = 0; i < example.length; i++) {
         const vortex = example[i];
