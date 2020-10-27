@@ -7,7 +7,7 @@ A Rust/WASM implementation of two-dimensional point vortex dynamics.
 
 ```
 git clone https://github.com/christiankuhl/vortexdynamics-wasm.git
-cd mandelbrot-wasm
+cd vortexdynamics-wasm
 python3 devserver.py
 ```
 serves a barebones webpage `index.html` which loads the compiled WASM and necessary JS glue code.
