@@ -1,7 +1,7 @@
 # vortexdynamics-wasm
 A Rust/WASM implementation of two-dimensional point vortex dynamics.
 
-![vortexdynamics-wasm](https://github.com/christiankuhl/vortexdynamics-wasm/raw/master/screenshot.png "vortexdynamics-wasm")
+![vortexdynamics-wasm](https://github.com/christiankuhl/vortexdynamics-wasm/blob/master/screenshot.png "vortexdynamics-wasm")
 
 ## Installation and usage
 
